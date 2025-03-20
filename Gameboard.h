@@ -9,7 +9,8 @@
 #include <cstdlib>
 #include <ctime>
 
-class GameBoard {
+
+class Gameboard {
     private:
         static constexpr int WIDTH = 30;
         static constexpr int HEIGHT = 16;
@@ -24,9 +25,10 @@ class GameBoard {
         int countAdjacentMines(int row, int col);
 
     public:
-        GameBoard();
+        Gameboard();
         void resetBoard();
         bool isMine(int row, int col);
         Space& getSpace(int row, int col);
+        void revealSpace(int row, int col);
 };
 #endif

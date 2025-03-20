@@ -25,6 +25,8 @@ class Space {
         void setAdjacentMines(int count);
         void reveal();
         void toggleFlag();
+        void setRevealed(bool revealed);
+        void setFlagged(bool flagged);
 
 };
 
