@@ -18,9 +18,9 @@ void Gameboard::placeMines() {
     while (minesPlaced < MINES) {
         int row = std::rand() % HEIGHT;
         int col = std::rand() % WIDTH;
-        
+
         // Check if the row is already in the minemap, or if the position already contains a mine.
-        if (mineMap.find(row) == mineMap.end() || mineMap[row].find(col) == mineMap[row].end()) { 
+        if (mineMap.find(row) == mineMap.end() || mineMap[row].find(col) == mineMap[row].end()) {
             mineMap[row].insert(col); // Insert a mine if there isn't a mine already.
             board[row][col].setMine(true); // Mark the mine on the board.
             ++minesPlaced; // Increment the counter.
@@ -48,7 +48,7 @@ int Gameboard::countAdjacentMines(int row, int col) {
         for (int dc = -1; dc <= 1; ++dc) {
             // Skip the current cell itself, doesn't contribute to the count.
             if (dr == 0 && dc == 0) continue;
-            
+
             // Using the relative offset, we can determine the index of the position to check.
             int newRow = row + dr;
             int newCol = col + dc;
@@ -77,9 +77,37 @@ void Gameboard::revealSpace(int row, int col) {
     // If flagged, you must remove the flag, and then reveal it.
     if (board[row][col].getIsFlagged()) {
         board[row][col].setFlagged(false);
-        buttons[row][col]->setText("");  // Clear the flag visually
-        buttons[row][col]->setStyleSheet("background-color: lightgray;");
     }
+
+    // Reveal the current space.
+    board[row][col].setRevealed(true);
+
+    // If it's a mine, game over.
+    if (board[row][col].getIsMine()) {
+        std::cout << "Game Over! You hit a mine (" << row << ", " << col << ")" << std::endl;
+        return;
+    }
+
+    int adjacentMines = board[row][col].getAdjacentMines();
+    if (adjacentMines > 0) {
+        std::cout << "Revealed space at (" << row << ", " << col << ") with " << adjacentMines << " adjacent mines." << std::endl;
+        return;
+    }
+
+    // If there are no adjacent mines, recursively reveal neighbours.
+    for (int dr = -1; dr <= 1; ++dr) {
+        for (int dc = -1; dc <= 1; ++dc) {
+            if (dr == 0 && dc == 0) continue;  // Skip the current cell.
+            revealSpace(row + dr, col + dc);  // Recursively reveal neighbouring cells.
+        }
+    }
+}
+
+void Gameboard::flagSpace(int row, int col) {
+    if (board[row][col].getIsRevealed()) return;  // Can't flag revealed spaces
+
+    bool isCurrentlyFlagged = board[row][col].getIsFlagged();
+    board[row][col].setFlagged(!isCurrentlyFlagged);  // Toggle the flag
 }
 
 bool Gameboard::isMine(int row, int col) {
