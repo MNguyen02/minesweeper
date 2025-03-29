@@ -45,5 +45,3 @@ void Space::setFlagged(bool flagged) {
 void Space::setIsQuestion(bool question) {
     isQuestion = question;
 }
-
-
