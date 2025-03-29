@@ -9,6 +9,7 @@ private:
     int adjacentMines;
     bool isRevealed;
     bool isFlagged;
+    bool isQuestion;
 
 public:
     // Constructor
@@ -19,12 +20,14 @@ public:
     int getAdjacentMines() const;
     bool getIsRevealed() const;
     bool getIsFlagged() const;
-
+    bool getIsQuestion() const;
+    
     // Setters
     void setMine(bool mine);
     void setAdjacentMines(int count);
     void setRevealed(bool revealed);
     void setFlagged(bool flagged);
+    void setIsQuestion(bool question);
 
 };
 
