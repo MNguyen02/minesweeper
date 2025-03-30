@@ -1,6 +1,17 @@
+/*
+ * Author: Martin Nguyen
+ * Description: Implementation of Gameboard class for Minesweeper game
+ * Date: 02/06/2025
+ */
+
 #include "Gameboard.h"
 #include <QApplication>
 
+/*
+ * Constructor: Gameboard
+ * Description: Initializes a new gameboard with default values
+ * Parameters: parent - Parent widget (managed by Qt)
+ */
 Gameboard::Gameboard(QWidget *parent) : QWidget(parent), gameOver(false), firstClick(true)
 {
     gridLayout = new QGridLayout(this);
@@ -14,6 +25,137 @@ Gameboard::Gameboard(QWidget *parent) : QWidget(parent), gameOver(false), firstC
     resetBoard();
 }
 
+/*
+ * Destructor: Gameboard
+ * Description: Destroys the gameboard object (managed by Qt)
+ */
+Gameboard::~Gameboard()
+{
+}
+
+/*
+ * Function: resetBoard
+ * Description: Resets the gameboard to its initial state
+ */
+void Gameboard::resetBoard()
+{
+    board.clear();
+    board.resize(HEIGHT, std::vector<Space>(WIDTH));
+    mineMap.clear();
+    gameOver = false;
+    firstClick = true;
+
+    // Reset all buttons
+    for (int row = 0; row < HEIGHT; ++row)
+    {
+        for (int col = 0; col < WIDTH; ++col)
+        {
+            buttons[row][col]->setText("");
+            buttons[row][col]->setEnabled(true);
+            buttons[row][col]->setStyleSheet("");
+        }
+    }
+}
+
+/*
+ * Function: isMine
+ * Description: Checks if a square has a mine
+ * Parameters: row - The row of the square, col - The column of the square
+ * Returns: true if the square has a mine, false otherwise
+ */
+bool Gameboard::isMine(int row, int col)
+{
+    return mineMap.find(row) != mineMap.end() &&
+           mineMap[row].find(col) != mineMap[row].end();
+}
+
+/*
+ * Function: getSpace
+ * Description: Gets a reference to a space on the board
+ * Parameters: row - The row of the square, col - The column of the square
+ * Returns: A reference to the space at the given row and column
+ */
+Space &Gameboard::getSpace(int row, int col)
+{
+    return board[row][col];
+}
+
+/*
+ * Function: revealSpace
+ * Description: Reveals a space on the board, and recursively reveals all adjacent spaces if the space has no adjacent mines (flood fill)
+ * Parameters: row - The row of the square, col - The column of the square
+ */
+void Gameboard::revealSpace(int row, int col)
+{
+    // Stay within the boundaries of the board
+    if (row < 0 || row >= HEIGHT || col < 0 || col >= WIDTH)
+        return;
+
+    // If space is already revealed, do nothing
+    if (board[row][col].getIsRevealed())
+        return;
+
+    // Remove any flag if it's there
+    if (board[row][col].getIsFlagged())
+        board[row][col].setFlagged(false);
+
+    // Show what's under this square
+    board[row][col].setRevealed(true);
+    updateButton(row, col);
+
+    // If space is a mine, stop here
+    if (isMine(row, col))
+        return;
+
+    // If no adjacent mines, reveal all adjacent spaces (flood fill)
+    if (countAdjacentMines(row, col) == 0)
+    {
+        for (int dr = -1; dr <= 1; ++dr)
+        {
+            for (int dc = -1; dc <= 1; ++dc)
+            {
+                if (dr == 0 && dc == 0)
+                    continue;                    // skip current square
+                revealSpace(row + dr, col + dc); // reveal neighbors recursively
+            }
+        }
+    }
+}
+
+/*
+ * Function: flagSpace
+ * Description: Puts a flag on a square (or removes it)
+ * Parameters: row - The row of the square, col - The column of the square
+ */
+void Gameboard::flagSpace(int row, int col)
+{
+    if (board[row][col].getIsRevealed())
+        return; // can't flag revealed squares!
+
+    // Toggle the flag (if it's there, remove it; if it's not, add it)
+    bool isCurrentlyFlagged = board[row][col].getIsFlagged();
+    board[row][col].setFlagged(!isCurrentlyFlagged);
+}
+
+/*
+ * Function: questionSpace
+ * Description: Puts a question mark on a square (or removes it)
+ * Parameters: row - The row of the square, col - The column of the square
+ */
+void Gameboard::questionSpace(int row, int col)
+{
+    if (board[row][col].getIsRevealed())
+        return; // can't question revealed squares!
+
+    // Toggle the question mark
+    bool isCurrentlyQuestion = board[row][col].getIsQuestion();
+    board[row][col].setIsQuestion(!isCurrentlyQuestion);
+}
+
+/*
+ * Function: createButtons
+ * Description: Creates the buttons for the gameboard
+ */
 void Gameboard::createButtons()
 {
     for (int row = 0; row < HEIGHT; ++row)
@@ -35,117 +177,93 @@ void Gameboard::createButtons()
     }
 }
 
-void Gameboard::resetBoard()
+/*
+ * Function: placeMines
+ * Description: Places all the mines randomly on the board, only after the first click
+ */
+void Gameboard::placeMines()
 {
-    board.clear();
-    board.resize(HEIGHT, std::vector<Space>(WIDTH));
-    mineMap.clear();
-    gameOver = false;
-    firstClick = true;
+    std::srand(std::time(0)); // Use a random seed by using the current time
+    mineMap.clear();          // Reset the mine map
 
-    // Reset all buttons
+    int minesPlaced = 0;
+    while (minesPlaced < MINES)
+    {
+        // Pick random spots for mines
+        int row = std::rand() % HEIGHT;
+        int col = std::rand() % WIDTH;
+
+        // Only place a mine if there isn't one there already
+        if (mineMap.find(row) == mineMap.end() || mineMap[row].find(col) == mineMap[row].end())
+        {
+            mineMap[row].insert(col); // Insert the mine into the mine map
+            board[row][col].setMine(true);
+            ++minesPlaced;
+        }
+    }
+}
+
+/*
+ * Function: calculateAdjacency
+ * Description: Calculates the number of adjacent mines for each square on the board
+ */
+void Gameboard::calculateAdjacency()
+{
     for (int row = 0; row < HEIGHT; ++row)
     {
         for (int col = 0; col < WIDTH; ++col)
         {
-            buttons[row][col]->setText("");
-            buttons[row][col]->setEnabled(true);
-            buttons[row][col]->setStyleSheet("");
+            // Skip mines - they don't need numbers!
+            if (!board[row][col].getIsMine())
+            {
+                int count = countAdjacentMines(row, col);
+                board[row][col].setAdjacentMines(count);
+            }
         }
     }
 }
 
-void Gameboard::handleButtonClick()
+/*
+ * Function: countAdjacentMines
+ * Description: Counts the number of adjacent mines for a given square
+ * Parameters: row - The row of the square, col - The column of the square
+ * Returns: The number of adjacent mines
+ */
+int Gameboard::countAdjacentMines(int row, int col)
 {
-    if (gameOver)
-        return;
-
-    QPushButton *button = qobject_cast<QPushButton *>(sender());
-    int row = button->property("row").toInt();
-    int col = button->property("col").toInt();
-
-    if (firstClick)
+    int count = 0;
+    // Check all 8 squares around this one
+    for (int dr = -1; dr <= 1; ++dr)
     {
-        placeMines();
-        calculateAdjacency();
-        firstClick = false;
-    }
-
-    if (isMine(row, col))
-    {
-        gameOver = true;
-        // Reveal all mines
-        for (int r = 0; r < HEIGHT; ++r)
+        for (int dc = -1; dc <= 1; ++dc)
         {
-            for (int c = 0; c < WIDTH; ++c)
+            if (dr == 0 && dc == 0)
+                continue; // skip the square itself
+
+            // Look at each neighbor
+            int newRow = row + dr;
+            int newCol = col + dc;
+
+            // Make sure we're still on the board
+            if (newRow >= 0 && newRow < HEIGHT && newCol >= 0 && newCol < WIDTH)
             {
-                if (isMine(r, c))
+                // If there's a mine there, count it!
+                if (mineMap.find(newRow) != mineMap.end() &&
+                    mineMap[newRow].find(newCol) != mineMap[newRow].end())
                 {
-                    buttons[r][c]->setText("💣");
+                    count++;
                 }
             }
         }
-
-        handleGameOver(false);
     }
-    else
-    {
-        revealSpace(row, col);
-        checkWin();
-    }
+    return count;
 }
 
-void Gameboard::handleButtonRightClick()
-{
-    if (gameOver)
-        return;
-
-    QPushButton *button = qobject_cast<QPushButton *>(sender());
-    int row = button->property("row").toInt();
-    int col = button->property("col").toInt();
-
-    if (!board[row][col].getIsRevealed())
-    {
-        if (board[row][col].getIsFlagged())
-        {
-            board[row][col].setFlagged(false);
-            questionSpace(row, col);
-        }
-        else if (board[row][col].getIsQuestion())
-        {
-            board[row][col].setIsQuestion(false);
-            board[row][col].setFlagged(false);
-        }
-        else
-        {
-            flagSpace(row, col);
-        }
-        updateButton(row, col);
-    }
-}
-
-void Gameboard::handleGameOver(bool isWin)
-{
-    gameOver = true;
-    QString message = isWin ? "Congratulations! You won!" : "Game Over! You hit a mine!";
-    QMessageBox msgBox;
-    msgBox.setWindowTitle(isWin ? "Victory!" : "Game Over");
-    msgBox.setText(message);
-    msgBox.setStandardButtons(QMessageBox::Reset | QMessageBox::Close);
-    msgBox.setDefaultButton(QMessageBox::Reset);
-
-    int ret = msgBox.exec();
-
-    if (ret == QMessageBox::Reset)
-    {
-        resetBoard();
-    }
-    else
-    {
-        QApplication::quit();
-    }
-}
-
+/*
+ * Function: updateButton
+ * Description: Updates how a button looks based on what it is (number, mine, flag, etc)
+ * Parameters: row - The row of the square, col - The column of the square
+ */
 void Gameboard::updateButton(int row, int col)
 {
     QPushButton *button = buttons[row][col];
@@ -153,19 +271,19 @@ void Gameboard::updateButton(int row, int col)
 
     if (space.getIsRevealed())
     {
-        button->setEnabled(false);
+        button->setEnabled(false); // can't click revealed squares
         if (isMine(row, col))
         {
-            button->setText("💣");
+            button->setText("💣"); // show the mine if mine is clicked.
         }
         else
         {
             int adjacentMines = countAdjacentMines(row, col);
-            button->setText("");
+            button->setText(""); // Blank the square by default.
             if (adjacentMines > 0)
             {
                 button->setText(QString::number(adjacentMines));
-                // Set different colors for different numbers
+                // Make each number a different color, shows danger level of the square.
                 QString color;
                 switch (adjacentMines)
                 {
@@ -200,18 +318,22 @@ void Gameboard::updateButton(int row, int col)
     }
     else if (space.getIsFlagged())
     {
-        button->setText("🚩");
+        button->setText("🚩"); // show flag
     }
     else if (space.getIsQuestion())
     {
-        button->setText("❓");
+        button->setText("❓"); // show question mark
     }
     else
     {
-        button->setText("");
+        button->setText(""); // Blank the square by default.
     }
 }
 
+/*
+ * Function: checkWin
+ * Description: Checks if game is won- we win if all non-mine squares are revealed
+ */
 void Gameboard::checkWin()
 {
     bool allNonMinesRevealed = true;
@@ -219,6 +341,7 @@ void Gameboard::checkWin()
     {
         for (int col = 0; col < WIDTH; ++col)
         {
+            // If safe square is still unrevealed, we haven't won yet
             if (!isMine(row, col) && !board[row][col].getIsRevealed())
             {
                 allNonMinesRevealed = false;
@@ -229,6 +352,7 @@ void Gameboard::checkWin()
             break;
     }
 
+    // If everything except mines is revealed, game is won.
     if (allNonMinesRevealed)
     {
         gameOver = true;
@@ -236,136 +360,111 @@ void Gameboard::checkWin()
     }
 }
 
-void Gameboard::placeMines()
+/*
+ * Function: handleButtonClick
+ * Description: Handles the click event for a button
+ */
+void Gameboard::handleButtonClick()
 {
-    std::srand(std::time(0)); // Use the time as a random seed
-    mineMap.clear();          // Clear the minemap.
+    if (gameOver)
+        return;
 
-    int minesPlaced = 0;
-    while (minesPlaced < MINES)
+    QPushButton *button = qobject_cast<QPushButton *>(sender());
+    int row = button->property("row").toInt();
+    int col = button->property("col").toInt();
+
+    // If first click, place mines and calculate adjacency
+    if (firstClick)
     {
-        int row = std::rand() % HEIGHT;
-        int col = std::rand() % WIDTH;
-
-        // Check if the row is already in the minemap, or if the position already contains a mine.
-        if (mineMap.find(row) == mineMap.end() || mineMap[row].find(col) == mineMap[row].end())
-        {
-            mineMap[row].insert(col);      // Insert a mine if there isn't a mine already.
-            board[row][col].setMine(true); // Mark the mine on the board.
-            ++minesPlaced;                 // Increment the counter.
-        }
+        placeMines();
+        calculateAdjacency();
+        firstClick = false;
     }
-}
 
-void Gameboard::calculateAdjacency()
-{
-    for (int row = 0; row < HEIGHT; ++row)
+    if (isMine(row, col))
     {
-        for (int col = 0; col < WIDTH; ++col)
+        gameOver = true;
+        // Reveal all mines
+        for (int r = 0; r < HEIGHT; ++r)
         {
-            // if the current space is not a mine, calculate adjacent mines.
-            if (!board[row][col].getIsMine())
+            for (int c = 0; c < WIDTH; ++c)
             {
-                int count = countAdjacentMines(row, col);
-                board[row][col].setAdjacentMines(count);
-            }
-        }
-    }
-}
-
-int Gameboard::countAdjacentMines(int row, int col)
-{
-    int count = 0;
-
-    // Using relative offsets, we can check positions around the space.
-    for (int dr = -1; dr <= 1; ++dr)
-    {
-        for (int dc = -1; dc <= 1; ++dc)
-        {
-            // Skip the current cell itself, doesn't contribute to the count.
-            if (dr == 0 && dc == 0)
-                continue;
-
-            // Using the relative offset, we can determine the index of the position to check.
-            int newRow = row + dr;
-            int newCol = col + dc;
-
-            // Check if the neighbor is within bounds and contains a mine
-            if (newRow >= 0 && newRow < HEIGHT && newCol >= 0 && newCol < WIDTH)
-            {
-                // Check if the position is a mine.
-                if (mineMap.find(newRow) != mineMap.end() && mineMap[newRow].find(newCol) != mineMap[newRow].end())
+                if (isMine(r, c))
                 {
-                    count++;
+                    buttons[r][c]->setText("💣");
                 }
             }
         }
+
+        handleGameOver(false);
     }
-    return count;
+    else
+    {
+        revealSpace(row, col);
+        checkWin();
+    }
 }
 
-void Gameboard::revealSpace(int row, int col)
+/*
+ * Function: handleButtonRightClick
+ * Description: Handles the right-click event for a button
+ */
+void Gameboard::handleButtonRightClick()
 {
-    // Check that the position is within bounds.
-    if (row < 0 || row >= HEIGHT || col < 0 || col >= WIDTH)
-        return;
+    if (gameOver)
+        return; // can't do anything if game's done
 
-    // If already revealed, do nothing
-    if (board[row][col].getIsRevealed())
+    // Figure out which button got right-clicked
+    QPushButton *button = qobject_cast<QPushButton *>(sender());
+    int row = button->property("row").toInt();
+    int col = button->property("col").toInt();
+
+    // Only work with unrevealed squares (can't flag a number!)
+    if (!board[row][col].getIsRevealed())
     {
-        return;
-    }
-
-    // If flagged, you must remove the flag, and then reveal it.
-    if (board[row][col].getIsFlagged())
-    {
-        board[row][col].setFlagged(false);
-    }
-
-    // Reveal the current space.
-    board[row][col].setRevealed(true);
-    updateButton(row, col); // Update the button's appearance
-
-    // If it's a mine, stop here
-    if (isMine(row, col))
-    {
-        return;
-    }
-
-    // If there are no adjacent mines, recursively reveal neighbours
-    if (countAdjacentMines(row, col) == 0)
-    {
-        for (int dr = -1; dr <= 1; ++dr)
+        // This cycles through: empty -> flag -> question -> empty
+        if (board[row][col].getIsFlagged())
         {
-            for (int dc = -1; dc <= 1; ++dc)
-            {
-                if (dr == 0 && dc == 0)
-                    continue;                    // Skip the current cell
-                revealSpace(row + dr, col + dc); // Recursively reveal neighbouring cells
-            }
+            board[row][col].setFlagged(false);
+            questionSpace(row, col); // make it a question mark
         }
+        else if (board[row][col].getIsQuestion())
+        {
+            board[row][col].setIsQuestion(false);
+            board[row][col].setFlagged(false); // back to empty
+        }
+        else
+        {
+            flagSpace(row, col); // make it a flag
+        }
+        updateButton(row, col); // show the changes
     }
 }
 
-void Gameboard::flagSpace(int row, int col)
+/*
+ * Function: handleGameOver
+ * Description: Shows the game over screen - works for both winning and losing
+ */
+void Gameboard::handleGameOver(bool isWin)
 {
-    if (board[row][col].getIsRevealed())
-        return; // Can't flag revealed spaces
+    gameOver = true;
+    // Different message for winning vs losing
+    QString message = isWin ? "Congratulations! You won!" : "Game Over! You hit a mine!";
+    QMessageBox msgBox;
+    msgBox.setWindowTitle(isWin ? "Victory!" : "Game Over");
+    msgBox.setText(message);
+    // Give options to reset or quit
+    msgBox.setStandardButtons(QMessageBox::Reset | QMessageBox::Close);
+    msgBox.setDefaultButton(QMessageBox::Reset);
 
-    bool isCurrentlyFlagged = board[row][col].getIsFlagged();
-    board[row][col].setFlagged(!isCurrentlyFlagged); // Toggle the flag
-}
+    int ret = msgBox.exec();
 
-void Gameboard::questionSpace(int row, int col)
-{
-    if (board[row][col].getIsRevealed())
-        return; // Can't question revealed spaces
-
-    bool isCurrentlyQuestion = board[row][col].getIsQuestion();
-    board[row][col].setIsQuestion(!isCurrentlyQuestion); // Toggle the question
-}
-
-bool Gameboard::isMine(int row, int col)
-{
-    return mineMap.find(row) != mineMap.end() && mineMap[row].find(col) != mineMap[row].end();
+    if (ret == QMessageBox::Reset)
+    {
+        resetBoard(); // they want to play again.
+    }
+    else
+    {
+        QApplication::quit(); // they're done playing, quit the game.
+    }
 }
